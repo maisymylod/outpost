@@ -1,0 +1,9 @@
+# Rendered by outpost from the workload spec. Edit the spec, not this file.
+region             = "us-east-1"
+cluster_name       = "{{ .ClusterName }}"
+workload_namespace = "{{ .Spec.Metadata.Namespace }}"
+release_name       = "{{ .Spec.Metadata.Name }}"
+gpu_instance_type  = "{{ .GPUInstanceType }}"
+gpu_node_desired   = {{ .NodeDesired }}
+gpu_node_min       = {{ .NodeMin }}
+gpu_node_max       = {{ .NodeMax }}

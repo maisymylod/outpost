@@ -1,12 +1,7 @@
 package render
 
 import (
-	"bytes"
 	"embed"
-	"fmt"
-	"io/fs"
-	"path"
-	"strings"
 
 	"github.com/maisymylod/outpost/internal/spec"
 )
@@ -46,48 +41,7 @@ func (onPremRenderer) Render(s *spec.Spec) ([]Artifact, error) {
 		Env:           sortedKV(s.Workload.Env),
 	}
 
-	var arts []Artifact
-	err := fs.WalkDir(onPremFS, onPremRoot, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		raw, err := onPremFS.ReadFile(p)
-		if err != nil {
-			return err
-		}
-
-		rel := strings.TrimPrefix(p, onPremRoot+"/")
-		out := path.Join("chart", rel)
-
-		if strings.HasSuffix(rel, ".tmpl") {
-			out = strings.TrimSuffix(out, ".tmpl")
-			rendered, err := renderTemplate(rel, string(raw), data)
-			if err != nil {
-				return err
-			}
-			raw = rendered
-		}
-
-		arts = append(arts, Artifact{Path: out, Mode: 0o644, Content: raw})
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("walk on-prem templates: %w", err)
-	}
-	return arts, nil
-}
-
-// renderTemplate executes one embedded template against data.
-func renderTemplate(name, body string, data any) ([]byte, error) {
-	t := mustParse(name, body)
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, data); err != nil {
-		return nil, fmt.Errorf("render %s: %w", name, err)
-	}
-	return buf.Bytes(), nil
+	return renderEmbedded(onPremFS, onPremRoot, "chart", data)
 }
 
 func init() {

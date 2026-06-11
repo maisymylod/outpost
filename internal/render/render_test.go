@@ -250,6 +250,57 @@ func TestOnPremHelm(t *testing.T) {
 	}
 }
 
+// TestCloudTerraform validates the rendered Terraform with the real tool:
+// fmt -check (no network) always, and init + validate when network is allowed.
+// Skipped when terraform is not installed.
+func TestCloudTerraform(t *testing.T) {
+	tfBin, err := exec.LookPath("terraform")
+	if err != nil {
+		t.Skip("terraform not installed; skipping")
+	}
+
+	s := loadExample(t)
+	arts, err := Render(spec.TargetCloud, s)
+	if err != nil {
+		t.Fatalf("render cloud: %v", err)
+	}
+
+	dir := t.TempDir()
+	for _, a := range arts {
+		dst := filepath.Join(dir, filepath.FromSlash(a.Path))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(dst, a.Content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tfDir := filepath.Join(dir, "terraform")
+
+	// fmt -check is offline and fast; always run it.
+	if out, err := runIn(tfDir, tfBin, "fmt", "-check", "-recursive"); err != nil {
+		t.Fatalf("terraform fmt -check failed: %v\n%s", err, out)
+	}
+
+	if os.Getenv("OUTPOST_SKIP_TERRAFORM_INIT") != "" {
+		t.Skip("OUTPOST_SKIP_TERRAFORM_INIT set; ran fmt -check only")
+	}
+
+	if out, err := runIn(tfDir, tfBin, "init", "-backend=false", "-input=false"); err != nil {
+		t.Fatalf("terraform init failed: %v\n%s", err, out)
+	}
+	if out, err := runIn(tfDir, tfBin, "validate"); err != nil {
+		t.Fatalf("terraform validate failed: %v\n%s", err, out)
+	}
+}
+
+func runIn(dir, bin string, args ...string) ([]byte, error) {
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "TF_IN_AUTOMATION=1")
+	return cmd.CombinedOutput()
+}
+
 func findArtifact(t *testing.T, arts []Artifact, path string) []byte {
 	t.Helper()
 	for _, a := range arts {
