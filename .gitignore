@@ -1,0 +1,12 @@
+# Build output
+/bin/
+/dist/
+outpost
+
+# Local render output
+/out/
+/_demo/
+
+# Editor / OS
+.DS_Store
+*.swp
