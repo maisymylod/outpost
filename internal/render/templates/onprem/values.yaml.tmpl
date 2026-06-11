@@ -1,0 +1,36 @@
+# Rendered by outpost from the workload spec. The operator consumes the
+# workload values below via the Workload custom resource.
+operator:
+  image: {{ .OperatorImage | quote }}
+  replicas: 1
+
+workload:
+  name: {{ .Spec.Metadata.Name }}
+  namespace: {{ .Spec.Metadata.Namespace }}
+  image: {{ .Spec.Workload.Image | quote }}
+  replicas: {{ .Spec.Workload.Replicas }}
+  gpu:
+    count: {{ .Spec.Workload.GPU.Count }}
+    class: {{ .Spec.Workload.GPU.Class | quote }}
+    interconnect:
+      nccl: {{ .Spec.Workload.GPU.Interconnect.NCCL }}
+      infiniband: {{ .Spec.Workload.GPU.Interconnect.InfiniBand }}
+  resources:
+    cpu: {{ .Spec.Workload.Resources.CPU | quote }}
+    memory: {{ .Spec.Workload.Resources.Memory | quote }}
+{{- if .Spec.Workload.Resources.HugePages }}
+    hugepages: {{ .Spec.Workload.Resources.HugePages | quote }}
+{{- end }}
+{{- if .Env }}
+  env:
+{{- range .Env }}
+    {{ .Key }}: {{ .Value | quote }}
+{{- end }}
+{{- end }}
+{{- if .Spec.Workload.Ports }}
+  ports:
+{{- range .Spec.Workload.Ports }}
+    - name: {{ .Name }}
+      port: {{ .Port }}
+{{- end }}
+{{- end }}

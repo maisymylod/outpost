@@ -1,0 +1,6 @@
+apiVersion: v2
+name: {{ .Spec.Metadata.Name }}
+description: On-prem deployment of {{ .Spec.Metadata.Name }} via the outpost Workload operator
+type: application
+version: {{ .ChartVersion }}
+appVersion: {{ .ChartVersion | quote }}

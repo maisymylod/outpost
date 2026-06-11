@@ -1,0 +1,35 @@
+apiVersion: outpost.dev/v1
+kind: Workload
+metadata:
+  name: {{ .Values.workload.name }}
+  namespace: {{ .Values.workload.namespace }}
+  labels:
+    {{- include "outpost.labels" . | nindent 4 }}
+spec:
+  image: {{ .Values.workload.image | quote }}
+  replicas: {{ .Values.workload.replicas }}
+  gpu:
+    count: {{ .Values.workload.gpu.count }}
+    class: {{ .Values.workload.gpu.class | quote }}
+    interconnect:
+      nccl: {{ .Values.workload.gpu.interconnect.nccl }}
+      infiniband: {{ .Values.workload.gpu.interconnect.infiniband }}
+  resources:
+    cpu: {{ .Values.workload.resources.cpu | quote }}
+    memory: {{ .Values.workload.resources.memory | quote }}
+    {{- with .Values.workload.resources.hugepages }}
+    hugepages: {{ . | quote }}
+    {{- end }}
+  {{- with .Values.workload.env }}
+  env:
+    {{- range $k, $v := . }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+  {{- end }}
+  {{- with .Values.workload.ports }}
+  ports:
+    {{- range . }}
+    - name: {{ .name }}
+      port: {{ .port }}
+    {{- end }}
+  {{- end }}

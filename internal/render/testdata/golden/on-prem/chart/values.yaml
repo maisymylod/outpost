@@ -1,0 +1,30 @@
+# Rendered by outpost from the workload spec. The operator consumes the
+# workload values below via the Workload custom resource.
+operator:
+  image: "ghcr.io/maisymylod/outpost-operator:v0.1.0"
+  replicas: 1
+
+workload:
+  name: llm-inference
+  namespace: inference
+  image: "ghcr.io/example/vllm-server:0.6.3"
+  replicas: 2
+  gpu:
+    count: 4
+    class: "nvidia-a100-80gb"
+    interconnect:
+      nccl: true
+      infiniband: true
+  resources:
+    cpu: "16"
+    memory: "128Gi"
+    hugepages: "2Gi"
+  env:
+    MAX_MODEL_LEN: "8192"
+    MODEL_ID: "meta-llama/Llama-3.1-70B-Instruct"
+    TENSOR_PARALLEL_SIZE: "4"
+  ports:
+    - name: http
+      port: 8000
+    - name: metrics
+      port: 8001

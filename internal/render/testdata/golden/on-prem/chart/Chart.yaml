@@ -1,0 +1,6 @@
+apiVersion: v2
+name: llm-inference
+description: On-prem deployment of llm-inference via the outpost Workload operator
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
