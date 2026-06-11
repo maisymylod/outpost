@@ -1,0 +1,35 @@
+# Example outpost workload: a multi-GPU inference server.
+# One spec, rendered for all three targets. See README for the gap mapping.
+apiVersion: outpost.dev/v1
+kind: Workload
+metadata:
+  name: llm-inference
+  namespace: inference
+workload:
+  image: ghcr.io/example/vllm-server:0.6.3
+  replicas: 2
+  gpu:
+    count: 4              # GPUs per replica
+    class: nvidia-a100-80gb
+    interconnect:
+      nccl: true          # multi-GPU collective comms
+      infiniband: true    # RDMA fabric for cross-node NCCL
+  resources:
+    cpu: "16"
+    memory: 128Gi
+    hugepages: 2Gi        # required when infiniband is enabled
+  env:
+    MODEL_ID: meta-llama/Llama-3.1-70B-Instruct
+    TENSOR_PARALLEL_SIZE: "4"
+    MAX_MODEL_LEN: "8192"
+  ports:
+    - name: http
+      port: 8000
+    - name: metrics
+      port: 8001
+  command: ["python", "-m", "vllm.entrypoints.openai.api_server"]
+  args: ["--model", "$(MODEL_ID)", "--tensor-parallel-size", "$(TENSOR_PARALLEL_SIZE)"]
+targets:
+  - cloud
+  - on-prem
+  - air-gap
