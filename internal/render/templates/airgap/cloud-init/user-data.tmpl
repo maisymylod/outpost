@@ -1,0 +1,75 @@
+#cloud-config
+# Bootstraps a single bare-metal GPU node fully offline. Everything it needs
+# (k3s, the NVIDIA container runtime, and the workload image) is already on
+# disk from the squashfs root and the bundle's local registry.
+
+write_files:
+  # Point containerd at the bundle's local registry. The endpoint is a .local
+  # address served from this node; no traffic leaves the air-gapped network.
+  - path: /etc/rancher/k3s/registries.yaml
+    permissions: "0600"
+    content: |
+      mirrors:
+        "{{ .LocalRegistry }}":
+          endpoint:
+            - "http://{{ .LocalRegistry }}"
+      configs:
+        "{{ .LocalRegistry }}":
+          tls:
+            insecure_skip_verify: true
+
+  # Enable the NVIDIA container runtime for GPU scheduling.
+  - path: /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
+    content: |
+      [plugins."io.containerd.grpc.v1.cri".containerd]
+        default_runtime_name = "nvidia"
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia]
+        runtime_type = "io.containerd.runc.v2"
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options]
+        BinaryName = "/usr/bin/nvidia-container-runtime"
+
+  # The workload, deployed by k3s from its manifests directory. The image is the
+  # local registry reference; GPU resources and NCCL/InfiniBand env mirror what
+  # the operator wires on cluster targets.
+  - path: /var/lib/rancher/k3s/server/manifests/workload.yaml
+    content: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{ .Spec.Metadata.Name }}
+        namespace: {{ .Spec.Metadata.Namespace }}
+      spec:
+        replicas: {{ .Spec.Workload.Replicas }}
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: {{ .Spec.Metadata.Name }}
+        template:
+          metadata:
+            labels:
+              app.kubernetes.io/name: {{ .Spec.Metadata.Name }}
+          spec:
+            runtimeClassName: nvidia
+            tolerations:
+              - key: nvidia.com/gpu
+                operator: Exists
+                effect: NoSchedule
+            containers:
+              - name: workload
+                image: {{ .Image.LocalRef | quote }}
+                env:
+{{- range .Env }}
+                  - name: {{ .Key }}
+                    value: {{ .Value | quote }}
+{{- end }}
+                resources:
+                  limits:
+                    nvidia.com/gpu: {{ .Spec.Workload.GPU.Count }}
+                    cpu: {{ .Spec.Workload.Resources.CPU | quote }}
+                    memory: {{ .Spec.Workload.Resources.Memory | quote }}
+
+runcmd:
+  # Load mirrored images into the local registry, then start k3s from the
+  # binary baked into the squashfs root. All paths are local to the bundle.
+  - [ bash, /opt/outpost/images/load-images.sh ]
+  - [ systemctl, enable, --now, outpost-registry.service ]
+  - [ bash, -c, "INSTALL_K3S_SKIP_DOWNLOAD=true /opt/outpost/k3s/install.sh" ]

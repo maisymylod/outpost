@@ -1,0 +1,32 @@
+# Air-gap bundle: llm-inference
+
+A self-contained bundle for deploying llm-inference onto a bare-metal
+GPU node with no network access at deploy time. Everything resolves from inside
+the bundle: images come from the local registry (registry.outpost.local:5000), and the
+node boots from the PXE config and squashfs root shipped here.
+
+## Layout
+
+```
+images/manifest.yaml      what to mirror and the local refs pods pull
+images/mirror-images.sh   ONLINE staging step: pulls upstream into images/*.tar
+images/load-images.sh     OFFLINE step: loads archives into the local registry
+pxe/pxelinux.cfg/default  PXE boot menu for the GPU node
+cloud-init/user-data      provisions k3s, the NVIDIA runtime, and the workload
+cloud-init/meta-data      node identity
+build-squashfs.sh         builds the deterministic root filesystem image
+squashfs/packages.list    offline package set baked into the root fs
+bundle.sh                 packages everything into a reproducible tarball
+```
+
+## Workflow
+
+1. On a connected host: `SOURCE_REGISTRY=<your-registry> images/mirror-images.sh`
+   pulls the upstream image into `images/`. This is the only step that uses the
+   network, and the upstream host is supplied at runtime, never stored.
+2. `./build-squashfs.sh` assembles the root filesystem image.
+3. `./bundle.sh` produces a checksummed, reproducible tarball.
+4. Move the tarball across the air gap. On the target side, PXE-boot the node;
+   cloud-init loads the images into registry.outpost.local:5000 and starts the workload.
+
+No file in the deploy path references an external registry or URL.

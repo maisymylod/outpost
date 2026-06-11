@@ -1,0 +1,11 @@
+# PXE boot menu for bootstrapping a bare-metal GPU node from the bundle.
+# Kernel, initrd, and the squashfs root image are all served from this bundle's
+# TFTP/local root: no external boot infrastructure is referenced.
+DEFAULT outpost
+PROMPT 0
+TIMEOUT 50
+
+LABEL outpost
+  MENU LABEL Provision {{ .Spec.Metadata.Name }} GPU node
+  KERNEL boot/vmlinuz
+  APPEND initrd=boot/initrd.img ip=dhcp root=live:LABEL=OUTPOST rd.live.image rd.live.dir=live rd.live.squashimg=rootfs.squashfs console=tty0 console=ttyS0,115200 cloud-init=enabled ds=nocloud;s=/cloud-init/

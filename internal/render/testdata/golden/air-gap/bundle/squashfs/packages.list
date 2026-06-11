@@ -1,0 +1,7 @@
+# Offline package set baked into the GPU node root filesystem by
+# build-squashfs.sh. Stage the matching files under squashfs/packages/ on the
+# build host. These cover the NVIDIA driver stack and the air-gapped k3s runtime.
+nvidia-driver.run
+nvidia-container-toolkit.tar
+k3s
+k3s-airgap-images.tar

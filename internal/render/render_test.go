@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -299,6 +300,94 @@ func runIn(dir, bin string, args ...string) ([]byte, error) {
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "TF_IN_AUTOMATION=1")
 	return cmd.CombinedOutput()
+}
+
+// externalRegistry matches public container registry hosts that must never
+// appear in the air-gap deploy path.
+var externalRegistry = regexp.MustCompile(`(?i)\b(docker\.io|registry-1\.docker\.io|ghcr\.io|quay\.io|gcr\.io|registry\.k8s\.io|k8s\.gcr\.io|nvcr\.io|mcr\.microsoft\.com|public\.ecr\.aws|[a-z0-9-]+\.amazonaws\.com)\b`)
+
+// urlRef matches a URL and captures its host (with optional port).
+var urlRef = regexp.MustCompile(`(?i)\b(?:https?|ftp)://([a-z0-9._-]+(?::[0-9]+)?)`)
+
+// isLocalHost reports whether a URL host is internal to the air-gapped network.
+func isLocalHost(host string) bool {
+	if i := strings.LastIndex(host, ":"); i >= 0 {
+		host = host[:i]
+	}
+	if host == "localhost" || strings.HasSuffix(host, ".local") {
+		return true
+	}
+	for _, p := range []string{"10.", "192.168.", "127."} {
+		if strings.HasPrefix(host, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestAirGapOfflinePurity fails if any rendered air-gap artifact references an
+// external registry or a non-local URL. This is the core air-gap invariant.
+func TestAirGapOfflinePurity(t *testing.T) {
+	s := loadExample(t)
+	arts, err := Render(spec.TargetAirGap, s)
+	if err != nil {
+		t.Fatalf("render air-gap: %v", err)
+	}
+	if len(arts) == 0 {
+		t.Fatal("air-gap produced no artifacts")
+	}
+
+	for _, a := range arts {
+		for i, line := range strings.Split(string(a.Content), "\n") {
+			lineNo := i + 1
+			if loc := externalRegistry.FindString(line); loc != "" {
+				t.Errorf("%s:%d references external registry %q: %s", a.Path, lineNo, loc, strings.TrimSpace(line))
+			}
+			for _, m := range urlRef.FindAllStringSubmatch(line, -1) {
+				if !isLocalHost(m[1]) {
+					t.Errorf("%s:%d references non-local URL host %q: %s", a.Path, lineNo, m[1], strings.TrimSpace(line))
+				}
+			}
+		}
+	}
+}
+
+// TestAirGapShellcheck runs shellcheck over the rendered bundle scripts. It is
+// skipped when shellcheck is not installed.
+func TestAirGapShellcheck(t *testing.T) {
+	scBin, err := exec.LookPath("shellcheck")
+	if err != nil {
+		t.Skip("shellcheck not installed; skipping")
+	}
+	s := loadExample(t)
+	arts, err := Render(spec.TargetAirGap, s)
+	if err != nil {
+		t.Fatalf("render air-gap: %v", err)
+	}
+
+	dir := t.TempDir()
+	var scripts []string
+	for _, a := range arts {
+		if !strings.HasSuffix(a.Path, ".sh") {
+			continue
+		}
+		dst := filepath.Join(dir, filepath.FromSlash(a.Path))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(dst, a.Content, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		scripts = append(scripts, dst)
+	}
+	if len(scripts) == 0 {
+		t.Fatal("no shell scripts rendered for air-gap")
+	}
+
+	args := append([]string{"--severity=warning"}, scripts...)
+	if out, err := exec.Command(scBin, args...).CombinedOutput(); err != nil {
+		t.Fatalf("shellcheck failed:\n%s", out)
+	}
 }
 
 func findArtifact(t *testing.T, arts []Artifact, path string) []byte {

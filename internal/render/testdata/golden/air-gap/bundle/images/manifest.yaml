@@ -1,0 +1,10 @@
+# Image manifest for offline mirroring. Every reference here resolves inside
+# the bundle: archives are loaded into the local registry and pods pull from it.
+# The upstream source registry is NOT recorded here; it is supplied to
+# mirror-images.sh via $SOURCE_REGISTRY at staging time on a connected host.
+localRegistry: registry.outpost.local:5000
+images:
+  - repository: example/vllm-server
+    tag: "0.6.3"
+    archive: images/example-vllm-server.tar
+    localRef: "registry.outpost.local:5000/example/vllm-server:0.6.3"

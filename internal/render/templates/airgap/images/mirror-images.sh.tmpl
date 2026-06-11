@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Staging step: run ONCE on a connected host to populate images/*.tar from the
+# upstream registry, then ship the whole bundle to the air-gapped environment.
+# This is the only script that touches the network, and it names no registry
+# itself: set SOURCE_REGISTRY to your upstream (for example a pull-through
+# cache) before running.
+set -euo pipefail
+
+: "${SOURCE_REGISTRY:?set SOURCE_REGISTRY to the upstream registry host}"
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+copy_image() {
+  local repo="$1" tag="$2" archive="$3"
+  echo "mirroring ${repo}:${tag} -> ${archive}"
+  skopeo copy --all \
+    "docker://${SOURCE_REGISTRY}/${repo}:${tag}" \
+    "docker-archive:${here}/$(basename "${archive}"):${repo}:${tag}"
+}
+
+copy_image "{{ .Image.Repository }}" "{{ .Image.Tag }}" "{{ .Image.Archive }}"
+
+echo "done. archives written under ${here}"
