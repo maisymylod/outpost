@@ -9,18 +9,26 @@ describes it once; `outpost` renders deployable artifacts for three very
 different environments, with the GPU specifics (device plugin, NCCL,
 InfiniBand, node affinity) wired correctly in each.
 
-## What it proves
+## What it does
 
-| Capability | How this repo demonstrates it |
-|---|---|
-| Idiomatic Go | The whole generator is Go: `go vet` clean, table-driven and golden tests, deterministic output. |
-| Deployment generator, multi-target rendering | One spec renders to three targets through a single `Renderer` interface. |
-| K8s ecosystem: Helm, CRDs, operators | on-prem renders a Helm chart, a `Workload` CRD, and a controller-runtime operator that reconciles the CR into a Deployment + Service. |
-| Terraform / IaC | cloud emits valid Terraform (EKS + GPU node group), passing `terraform validate` and `fmt -check`. |
-| Air-gapped tooling | air-gap produces a self-contained offline bundle with zero external registries or URLs in the deploy path. |
-| GPU infra (CUDA / NCCL / InfiniBand) | the sample workload is multi-GPU: `nvidia.com/gpu` requests, device-plugin tolerations and node affinity, NCCL + InfiniBand env, RDMA device, hugepages, shared memory. |
-| PXE / cloud-init / squashfs | the air-gap target emits a PXE boot config, cloud-init user-data, and a deterministic squashfs build script for a bare-metal GPU node. |
-| CI matrix | GitHub Actions builds across `linux/amd64`, `linux/arm64`, `darwin/arm64` and runs every per-target validator. |
+One `Renderer` interface, three implementations. From a single spec, outpost
+renders:
+
+- **cloud**: Terraform for a managed EKS cluster with a GPU node group, plus a
+  `helm_release` for the workload. Passes `terraform validate` and `fmt -check`.
+- **on-prem**: a Helm chart carrying a `Workload` CRD, RBAC, a
+  controller-runtime operator, and a `Workload` CR. The operator reconciles the
+  CR into a GPU-wired Deployment and Service.
+- **air-gap**: a self-contained offline bundle (image manifest and mirror
+  scripts, PXE boot config, cloud-init, deterministic squashfs build) with no
+  external registry or URL anywhere in the deploy path.
+
+The running example is a multi-GPU inference server, so the GPU specifics are
+real in every target: `nvidia.com/gpu` requests, device-plugin tolerations and
+node affinity, NCCL and InfiniBand env, an RDMA device, hugepages, and shared
+memory. Output is deterministic (byte-identical re-render), and every artifact
+is validated by the real tool (terraform, helm, kubeconform, shellcheck) in CI
+across `linux/amd64`, `linux/arm64`, and `darwin/arm64`.
 
 ## Architecture
 
