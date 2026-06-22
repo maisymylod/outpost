@@ -405,3 +405,25 @@ func findArtifact(t *testing.T, arts []Artifact, path string) []byte {
 	t.Fatalf("artifact %q not found; have %s", path, strings.Join(have, ", "))
 	return nil
 }
+
+func TestResolveGPUInstance(t *testing.T) {
+	// A known class maps cleanly with no warning.
+	if got, warn := resolveGPUInstance("nvidia-h100-80gb"); got != "p5.48xlarge" || warn != "" {
+		t.Fatalf("known class resolved to (%q, %q), want (p5.48xlarge, \"\")", got, warn)
+	}
+
+	// An unknown class falls back to the default and warns, naming the class,
+	// the default it picked, and at least one known class.
+	got, warn := resolveGPUInstance("nvidia-b200")
+	if got != defaultGPUInstanceType {
+		t.Errorf("unknown class instance = %q, want default %q", got, defaultGPUInstanceType)
+	}
+	if warn == "" {
+		t.Fatal("expected a warning for an unknown GPU class, got none")
+	}
+	for _, want := range []string{"nvidia-b200", defaultGPUInstanceType, "nvidia-h100-80gb"} {
+		if !strings.Contains(warn, want) {
+			t.Errorf("warning %q does not mention %q", warn, want)
+		}
+	}
+}

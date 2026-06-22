@@ -2,6 +2,10 @@ package render
 
 import (
 	"embed"
+	"fmt"
+	"os"
+	"sort"
+	"strings"
 
 	"github.com/maisymylod/outpost/internal/spec"
 )
@@ -24,6 +28,25 @@ var gpuInstanceTypes = map[string]string{
 
 const defaultGPUInstanceType = "p4de.24xlarge"
 
+// resolveGPUInstance maps a GPU class to an EC2 instance type. When the class
+// is unknown it falls back to the default and returns a non-empty warning
+// describing the substitution (the unknown class, the chosen default, and the
+// known classes) so the caller can surface it rather than silently shipping a
+// possibly-wrong accelerator.
+func resolveGPUInstance(class string) (instance, warning string) {
+	if instance, ok := gpuInstanceTypes[class]; ok {
+		return instance, ""
+	}
+	known := make([]string, 0, len(gpuInstanceTypes))
+	for k := range gpuInstanceTypes {
+		known = append(known, k)
+	}
+	sort.Strings(known)
+	warning = fmt.Sprintf("unknown GPU class %q; using default instance %s (known classes: %s)",
+		class, defaultGPUInstanceType, strings.Join(known, ", "))
+	return defaultGPUInstanceType, warning
+}
+
 // cloudRenderer emits Terraform for a managed EKS cluster with a GPU node group
 // plus Helm values for deploying the workload onto it.
 type cloudRenderer struct{}
@@ -43,9 +66,9 @@ type cloudData struct {
 }
 
 func (cloudRenderer) Render(s *spec.Spec) ([]Artifact, error) {
-	instance, ok := gpuInstanceTypes[s.Workload.GPU.Class]
-	if !ok {
-		instance = defaultGPUInstanceType
+	instance, warning := resolveGPUInstance(s.Workload.GPU.Class)
+	if warning != "" {
+		fmt.Fprintln(os.Stderr, "outpost: "+warning)
 	}
 
 	// One replica per GPU node; allow headroom for rolling updates.
