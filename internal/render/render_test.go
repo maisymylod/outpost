@@ -427,3 +427,28 @@ func TestResolveGPUInstance(t *testing.T) {
 		}
 	}
 }
+
+func TestMirrorImageForValidatesRepo(t *testing.T) {
+	// A normal upstream ref host-strips cleanly into a valid bundle image.
+	img, err := mirrorImageFor("ghcr.io/example/vllm-server:0.6.3")
+	if err != nil {
+		t.Fatalf("valid ref rejected: %v", err)
+	}
+	if img.Repository != "example/vllm-server" || img.Tag != "0.6.3" {
+		t.Errorf("parsed (%q, %q), want (example/vllm-server, 0.6.3)", img.Repository, img.Tag)
+	}
+	if img.Archive != "images/example-vllm-server.tar" {
+		t.Errorf("archive = %q, want images/example-vllm-server.tar", img.Archive)
+	}
+
+	// Refs that would yield a broken archive path or local ref must be rejected.
+	for _, bad := range []string{
+		"ghcr.io/ex ample/vllm-server", // space
+		"registry:5000/",               // empty repo after host strip
+		"ghcr.io/UPPER/name",           // uppercase is not a valid repo
+	} {
+		if _, err := mirrorImageFor(bad); err == nil {
+			t.Errorf("expected an error for %q, got none", bad)
+		}
+	}
+}
