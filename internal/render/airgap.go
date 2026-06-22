@@ -2,6 +2,8 @@ package render
 
 import (
 	"embed"
+	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/maisymylod/outpost/internal/spec"
@@ -42,7 +44,10 @@ type airGapData struct {
 }
 
 func (airGapRenderer) Render(s *spec.Spec) ([]Artifact, error) {
-	img := mirrorImageFor(s.Workload.Image)
+	img, err := mirrorImageFor(s.Workload.Image)
+	if err != nil {
+		return nil, err
+	}
 	data := airGapData{
 		Spec:          s,
 		LocalRegistry: localRegistry,
@@ -52,17 +57,30 @@ func (airGapRenderer) Render(s *spec.Spec) ([]Artifact, error) {
 	return renderEmbedded(airGapFS, airGapRoot, "bundle", data)
 }
 
+// imageRepoPattern matches a host-stripped repository name: one or more
+// lowercase path segments. It rejects spaces and other characters that would
+// produce an invalid archive filename or local reference.
+var imageRepoPattern = regexp.MustCompile(`^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$`)
+
 // mirrorImageFor rewrites an upstream image reference into a bundle-local one,
-// dropping the source registry host.
-func mirrorImageFor(ref string) mirrorImage {
+// dropping the source registry host. It rejects a reference whose host-stripped
+// repository is empty or malformed, since that would yield an invalid archive
+// path (e.g. "images/ex ample-vllm.tar") and a broken local ref.
+func mirrorImageFor(ref string) (mirrorImage, error) {
 	repo, tag := parseImageRef(ref)
+	if repo == "" {
+		return mirrorImage{}, fmt.Errorf("image %q: empty repository after stripping the registry host", ref)
+	}
+	if len(repo) > 255 || !imageRepoPattern.MatchString(repo) {
+		return mirrorImage{}, fmt.Errorf("image %q: repository %q is not a valid lowercase image name", ref, repo)
+	}
 	archive := "images/" + strings.ReplaceAll(repo, "/", "-") + ".tar"
 	return mirrorImage{
 		Repository: repo,
 		Tag:        tag,
 		Archive:    archive,
 		LocalRef:   localRegistry + "/" + repo + ":" + tag,
-	}
+	}, nil
 }
 
 // parseImageRef splits an image reference into its host-stripped repository and
